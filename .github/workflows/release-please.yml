@@ -1,0 +1,21 @@
+name: Release Please
+
+on:
+  push:
+    branches: [ "main" ]
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: google-github-actions/release-please-action@v4
+        with:
+          release-type: node
+          # Omit package-name if you're single-package and your package.json has "name": "quickquote"
+          # package-name: quickquote
+          # Optional: customize changelog sections
+          # changelog-types: '[{"type":"feat","section":"Features"},{"type":"fix","section":"Bug Fixes"},{"type":"chore","section":"Chores","hidden":true}]'
