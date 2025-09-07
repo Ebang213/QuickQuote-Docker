@@ -1,23 +1,9 @@
-import React, { useEffect, useMemo, useState } from 'react';
-import { computeEstimate } from './lib/calc';
+import React, { useEffect, useState } from 'react';
 import rates from './lib/rates.json';
-import jsPDF from 'jspdf';
+import { useEstimate, useClampedNumber, usePdfExporter } from './lib/hooks.js';
+import OptionButtons from './lib/OptionButtons.jsx';
 
-// Handle both simple numeric & rich object formats in rates.locationMultipliers
-function getLocationMeta(location) {
-  const raw = rates.locationMultipliers[location];
-  if (typeof raw === 'number') {
-    return {
-      multiplier: raw,
-      currency: location === 'US' ? 'USD' : 'GHS',
-    };
-  }
-  return raw || { multiplier: 1, currency: 'USD' };
-}
-function currencyFormatter(currency) {
-  try { return new Intl.NumberFormat(undefined, { style: 'currency', currency }); }
-  catch { return new Intl.NumberFormat(undefined, { style: 'currency', currency: 'USD' }); }
-}
+// duplicated currency/meta logic moved into hooks
 
 const PROJECTS = Object.keys(rates.projects);
 const QUALITIES = Object.keys(rates.qualityMultipliers);
@@ -28,31 +14,11 @@ export default function QuickQuoteEstimator() {
   const [projectType, setProjectType] = useState(PROJECTS[0]);
   const [quality, setQuality] = useState(QUALITIES[1] || 'Medium');
   const [location, setLocation] = useState(LOCATIONS[0]);
-  const [sqft, setSqft] = useState(100);
-  const [err, setErr] = useState('');
+  const { value: sqft, onChange: handleSqftChange } = useClampedNumber(100, { min: 1, max: 100000 });
+  const { labor, material, total, currency, error: err, fmt } = useEstimate(Number(sqft), projectType, quality, location);
+  const exportPdf = usePdfExporter({ role, projectType, quality, location, sqft, labor, material, total, currency, fmt });
 
-  const { currency } = useMemo(() => getLocationMeta(location), [location]);
-  const fmt = useMemo(() => currencyFormatter(currency), [currency]);
-
-  const { labor, material, total } = useMemo(() => {
-    try {
-      const res = computeEstimate(Number(sqft), projectType, quality, location);
-      setErr('');
-      return res;
-    } catch (e) {
-      setErr(e.message || 'Invalid inputs');
-      return { labor: 0, material: 0, total: 0 };
-    }
-  }, [sqft, projectType, quality, location]);
-
-  // Simple client-side validation & clamping
-  function handleSqftChange(e) {
-    const v = e.target.value.replace(/[^\d.]/g, '');
-    const n = Number(v);
-    setSqft(Number.isFinite(n) ? Math.max(1, Math.min(n, 100000)) : 0);
-  }
-
-  function exportPdf() {
+  function legacyExportPdf() {
     const doc = new jsPDF();
     const line = (y, text, bold=false) => {
       if (bold) doc.setFont(undefined, 'bold');
@@ -101,17 +67,7 @@ export default function QuickQuoteEstimator() {
       <main className="max-w-4xl mx-auto px-6 py-8">
         <div className="bg-white rounded-xl shadow-sm border p-6 space-y-6">
           {/* Role toggle (kept for continuity with your tests) */}
-          <div className="flex flex-wrap items-center gap-2">
-            {['Homeowner', 'Contractor'].map(r => (
-              <button
-                key={r}
-                className={`px-3 py-1.5 rounded border text-sm ${role === r ? 'bg-sky-600 text-white border-sky-600' : 'hover:bg-slate-50'}`}
-                onClick={() => setRole(r)}
-              >
-                {r}
-              </button>
-            ))}
-          </div>
+          <OptionButtons options={['Homeowner', 'Contractor']} value={role} onChange={setRole} />
 
           {/* Inputs */}
           <div className="grid sm:grid-cols-2 gap-4">
@@ -141,34 +97,12 @@ export default function QuickQuoteEstimator() {
 
             <label className="flex flex-col gap-1">
               <span className="text-sm font-medium">Material Quality</span>
-              <div className="flex gap-2">
-                {QUALITIES.map(q => (
-                  <button
-                    key={q}
-                    aria-pressed={quality === q}
-                    className={`px-3 py-1.5 rounded border text-sm ${quality === q ? 'bg-sky-600 text-white border-sky-600' : 'hover:bg-slate-50'}`}
-                    onClick={() => setQuality(q)}
-                  >
-                    {q}
-                  </button>
-                ))}
-              </div>
+              <OptionButtons options={QUALITIES} value={quality} onChange={setQuality} />
             </label>
 
             <label className="flex flex-col gap-1">
               <span className="text-sm font-medium">Location</span>
-              <div className="flex gap-2">
-                {LOCATIONS.map(loc => (
-                  <button
-                    key={loc}
-                    aria-pressed={location === loc}
-                    className={`px-3 py-1.5 rounded border text-sm ${location === loc ? 'bg-sky-600 text-white border-sky-600' : 'hover:bg-slate-50'}`}
-                    onClick={() => setLocation(loc)}
-                  >
-                    {loc}
-                  </button>
-                ))}
-              </div>
+              <OptionButtons options={LOCATIONS} value={location} onChange={setLocation} />
             </label>
           </div>
 

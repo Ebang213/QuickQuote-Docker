@@ -39,4 +39,11 @@ describe('computeEstimate', () => {
     const { total } = computeEstimate(33, 'Painting', 'Low', 'US');
     expect(Number.isFinite(total)).toBe(true);
   });
+
+  it('includes correct currency per location', () => {
+    const us = computeEstimate(10, 'Painting', 'Medium', 'US');
+    expect(us.currency).toBe('USD');
+    const gh = computeEstimate(10, 'Painting', 'Medium', 'Ghana');
+    expect(gh.currency).toBe('GHS');
+  });
 });

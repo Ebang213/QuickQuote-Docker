@@ -1,15 +1,13 @@
 name: Docker Publish
-
 on:
   push:
     branches: [ "main" ]
-    tags:     [ "v*" ]     # build when you push a git tag like v1.2.3
+    tags: [ "v*" ]
   workflow_dispatch:
 
 jobs:
   docker:
     runs-on: ubuntu-latest
-
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -26,10 +24,12 @@ jobs:
           username: ${{ secrets.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_TOKEN }}
 
-      # Grab version from package.json for main builds
+      # 👉 Read version safely (forces bash and uses GITHUB_OUTPUT)
       - name: Read version from package.json
         id: ver
-        run: echo "VERSION=$(node -p \"require('./package.json').version\")" >> $GITHUB_OUTPUT
+        shell: bash
+        run: |
+          echo "version=$(node -p "require('./package.json').version")" >> "$GITHUB_OUTPUT"
 
       - name: Docker meta (generate tags/labels)
         id: meta
@@ -37,14 +37,8 @@ jobs:
         with:
           images: admin213/quickquote
           tags: |
-            # If we're on the default branch → latest
             type=raw,value=latest,enable={{is_default_branch}}
-            # If we're on the default branch → vX.Y.Z from package.json
-            type=raw,value=v${{ steps.ver.outputs.VERSION }},enable={{is_default_branch}}
-            # If this was triggered by a git tag v* → use that tag as-is
-            type=ref,event=tag
-            # Always add a sha tag
-            type=sha
+            type=raw,value=v${{ steps.ver.outputs.version }}
 
       - name: Build & push
         uses: docker/build-push-action@v5
@@ -55,7 +49,3 @@ jobs:
           platforms: linux/amd64,linux/arm64
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
-          cache-from: type=registry,ref=admin213/quickquote:buildcache
-          cache-to:   type=registry,ref=admin213/quickquote:buildcache,mode=max
-          provenance: true
-          sbom: true
