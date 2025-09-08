@@ -49,7 +49,7 @@ export function useClampedNumber(initial = 0, { min = -Infinity, max = Infinity 
 }
 
 // Build a memoized PDF export function based on current inputs
-export function usePdfExporter({ role, projectType, quality, location, sqft, labor, material, total, currency, fmt }) {
+export function usePdfExporter({ role, projectType, quality, location, sqft, labor, material, total, currency, fmt, rangeLow, rangeHigh }) {
   return useCallback(() => {
     const doc = new jsPDF();
     const line = (y, text, bold = false) => {
@@ -72,6 +72,11 @@ export function usePdfExporter({ role, projectType, quality, location, sqft, lab
     line(y1 + 8, `Material: ${fmt.format(material)}`);
     line(y1 + 16, `Total:    ${fmt.format(total)}`, true);
 
+    // Optional confidence range if provided
+    if (typeof rangeLow === 'number' && typeof rangeHigh === 'number') {
+      line(y1 + 32, `Range:    ${fmt.format(rangeLow)} – ${fmt.format(rangeHigh)}`);
+    }
+
     const p = rates.projects[projectType];
     if (p) {
       line(y1 + 32, 'Rates used:', true);
@@ -80,7 +85,7 @@ export function usePdfExporter({ role, projectType, quality, location, sqft, lab
     }
 
     doc.save('QuickQuote_Estimate.pdf');
-  }, [role, projectType, quality, location, sqft, labor, material, total, currency, fmt]);
+  }, [role, projectType, quality, location, sqft, labor, material, total, currency, fmt, rangeLow, rangeHigh]);
 }
 
 // Manage roving focus + keyboard selection for option groups

@@ -17,6 +17,4 @@ jobs:
       - uses: googleapis/release-please-action@v4
         with:
           release-type: node
-          # Only add the next two lines if your package.json isn't at repo root
-          # path: .
-          # monorepo-tags: false
+          path: QuickQuote

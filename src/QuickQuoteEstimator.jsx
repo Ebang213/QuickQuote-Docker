@@ -3,20 +3,25 @@ import rates from './lib/rates.json';
 import { useEstimate, useClampedNumber, usePdfExporter } from './lib/hooks.js';
 import OptionButtons from './lib/OptionButtons.jsx';
 
-// duplicated currency/meta logic moved into hooks
-
 const PROJECTS = Object.keys(rates.projects);
 const QUALITIES = Object.keys(rates.qualityMultipliers);
 const LOCATIONS = Object.keys(rates.locationMultipliers);
 
 export default function QuickQuoteEstimator() {
-  const [role, setRole] = useState('Homeowner'); // keeps your button labels
+  const [role, setRole] = useState('Homeowner');
   const [projectType, setProjectType] = useState(PROJECTS[0]);
   const [quality, setQuality] = useState(QUALITIES[1] || 'Medium');
   const [location, setLocation] = useState(LOCATIONS[0]);
   const { value: sqft, onChange: handleSqftChange } = useClampedNumber(100, { min: 1, max: 100000 });
   const { labor, material, total, currency, error: err, fmt } = useEstimate(Number(sqft), projectType, quality, location);
-  const exportPdf = usePdfExporter({ role, projectType, quality, location, sqft, labor, material, total, currency, fmt });
+
+  // Simple confidence band based on chosen quality
+  const uncertaintyPct = quality === 'Low' ? 0.2 : quality === 'High' ? 0.1 : 0.15;
+  const round2 = (n) => Math.round((n + Number.EPSILON) * 100) / 100;
+  const rangeLow = round2(total * (1 - uncertaintyPct));
+  const rangeHigh = round2(total * (1 + uncertaintyPct));
+
+  const exportPdf = usePdfExporter({ role, projectType, quality, location, sqft, labor, material, total, currency, fmt, rangeLow, rangeHigh });
 
   function legacyExportPdf() {
     const doc = new jsPDF();
@@ -27,7 +32,7 @@ export default function QuickQuoteEstimator() {
     };
 
     const y0 = 16;
-    line(y0, 'QuickQuote — Estimate', true);
+    line(y0, 'QuickQuote Estimate', true);
     line(y0 + 8, `Role: ${role}`);
     line(y0 + 16, `Project: ${projectType}`);
     line(y0 + 24, `Quality: ${quality}`);
@@ -40,7 +45,6 @@ export default function QuickQuoteEstimator() {
     line(y1+8, `Material: ${fmt.format(material)}`);
     line(y1+16,`Total:    ${fmt.format(total)}`, true);
 
-    // Optional: include project rates
     const p = rates.projects[projectType];
     if (p) {
       line(y1 + 32, 'Rates used:', true);
@@ -66,7 +70,7 @@ export default function QuickQuoteEstimator() {
 
       <main className="max-w-4xl mx-auto px-6 py-8">
         <div className="bg-white rounded-xl shadow-sm border p-6 space-y-6">
-          {/* Role toggle (kept for continuity with your tests) */}
+          {/* Role toggle */}
           <OptionButtons options={['Homeowner', 'Contractor']} value={role} onChange={setRole} />
 
           {/* Inputs */}
@@ -110,13 +114,16 @@ export default function QuickQuoteEstimator() {
           {err ? (
             <div className="rounded border border-rose-300 bg-rose-50 text-rose-700 p-3 text-sm">{err}</div>
           ) : (
-            <div className="rounded-xl border bg-slate-50 p-4">
-              <div className="font-semibold mb-2">Estimate</div>
+            <div className="rounded-xl border bg-slate-50 p-4 space-y-2">
+              <div className="font-semibold">Estimate</div>
               <dl className="grid grid-cols-2 sm:grid-cols-3 gap-3">
                 <div><dt className="text-xs text-slate-500">Labor</dt><dd className="font-medium">{fmt.format(labor)}</dd></div>
                 <div><dt className="text-xs text-slate-500">Material</dt><dd className="font-medium">{fmt.format(material)}</dd></div>
                 <div><dt className="text-xs text-slate-500">Total</dt><dd className="font-semibold">{fmt.format(total)}</dd></div>
               </dl>
+              <div className="text-xs text-slate-600">
+                Confidence range (±{Math.round(uncertaintyPct * 100)}%): {fmt.format(rangeLow)} – {fmt.format(rangeHigh)}
+              </div>
             </div>
           )}
 
@@ -137,9 +144,10 @@ export default function QuickQuoteEstimator() {
         </div>
 
         <footer className="max-w-4xl mx-auto px-6 py-8 text-xs text-slate-400">
-          © 2025 QuickQuote — Estimates are for guidance only.
+          © {new Date().getFullYear()} QuickQuote — Estimates are for guidance only.
         </footer>
       </main>
     </div>
   );
 }
+

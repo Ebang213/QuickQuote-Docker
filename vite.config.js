@@ -27,5 +27,11 @@ export default defineConfig({
         '**/*.config.*',
       ],
     },
+    exclude: [
+      'e2e/**',
+      'playwright.config.*',
+      'node_modules/**',
+      'dist/**'
+    ],
   },
 })
