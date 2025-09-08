@@ -10,10 +10,6 @@ permissions:
   pages: write
   id-token: write
 
-defaults:
-  run:
-    working-directory: QuickQuote
-
 concurrency:
   group: pages
   cancel-in-progress: true
@@ -28,8 +24,10 @@ jobs:
           node-version: 20
       - name: Install deps
         run: npm ci
+        working-directory: QuickQuote
       - name: Build
         run: npm run build
+        working-directory: QuickQuote
       - name: Configure Pages
         uses: actions/configure-pages@v5
       - name: Upload artifact
@@ -58,4 +56,3 @@ jobs:
         uses: actions/deploy-pages@v4
         with:
           preview: true
-

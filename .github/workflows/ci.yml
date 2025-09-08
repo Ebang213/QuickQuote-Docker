@@ -6,10 +6,6 @@ env:
   DOCKER_IMAGE: quickquote:ci
   SERVICE_URL: http://localhost:8080
 
-defaults:
-  run:
-    working-directory: QuickQuote
-
 jobs:
   test:
     runs-on: ubuntu-latest
@@ -25,8 +21,12 @@ jobs:
           key: ${{ runner.os }}-node-${{ env.NODE_VERSION }}-${{ hashFiles('**/package-lock.json') }}
           restore-keys: |
             ${{ runner.os }}-node-${{ env.NODE_VERSION }}-
-      - run: npm ci
-      - run: npm test
+      - name: Install deps
+        run: npm ci
+        working-directory: QuickQuote
+      - name: Run unit tests
+        run: npm test
+        working-directory: QuickQuote
 
   e2e:
     runs-on: ubuntu-latest
@@ -37,12 +37,16 @@ jobs:
         with:
           node-version: ${{ env.NODE_VERSION }}
       - run: npm ci
+        working-directory: QuickQuote
       - name: Install Playwright Browsers
         run: npx playwright install --with-deps
+        working-directory: QuickQuote
       - name: Build app (for preview server)
         run: npm run build
+        working-directory: QuickQuote
       - name: Run Playwright tests
         run: npx playwright test --reporter=line
+        working-directory: QuickQuote
 
   docker-build:
     runs-on: ubuntu-latest
