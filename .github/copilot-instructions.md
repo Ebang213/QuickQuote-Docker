@@ -1,12 +1,19 @@
-# How to help on this repo
+# Copilot instructions
 
-- Prefer **small, isolated PRs** with clear commit messages (conventional commits).
-- Follow project style: React + Vite + Tailwind.
-- Add/keep **unit tests** with Vitest. Touching `src/lib/calc.js`? Update/add tests in `src/__tests__/`.
-- Keep UI logic in React components; move computation to `src/lib/*`.
-- Accessibility: label inputs, keyboard support for toggles, visible error states.
-- Performance: memoize heavy calculations and avoid recreating formatters per render.
-- Docker: image is `admin213/quickquote`. Build is multi-arch via GH Actions.
-- What to skip: compiled output (`dist/`, `build/`), lockfiles, `node_modules/`.
-- Use GitHub Issues for bugs/features; tag with relevant labels.
-- For major changes, discuss via issue/PR first to align with project goals.
+**Project intent:** QuickQuote – a Vite + React + Tailwind app with a simple cost estimator and optional PDF export.
+
+**Coding style:**
+- Prefer small pure functions and React hooks for UI state/logic.
+- Keep QuickQuoteEstimator.jsx lean; move business logic into `/src/lib/**`.
+- Use Vitest + Testing Library for unit tests.
+
+**Don't edit:**
+- `/coverage/**`
+- compiled artifacts under `/dist/**` or `/build/**`.
+
+**When adding tests:**
+- Put unit tests in `/src/__tests__` using `*.test.js`.
+- Use `vitest` and `@testing-library/react` helpers.
+
+**When touching CI:**
+- Keep workflows self-contained and avoid committing secrets.
