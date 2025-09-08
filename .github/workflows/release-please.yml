@@ -1,9 +1,11 @@
 name: Release Please
+
 on:
   push:
     branches: [ "main" ]
   workflow_dispatch:
 
+# Let the action open PRs & write tags
 permissions:
   contents: write
   pull-requests: write
@@ -15,7 +17,6 @@ jobs:
       - uses: googleapis/release-please-action@v4
         with:
           release-type: node
-          # optional, only if your code is not at repo root:
+          # Only add the next two lines if your package.json isn't at repo root
           # path: .
-          # optional: add a label prefix if you want
-          # pull-request-title-pattern: "chore: release ${version}"
+          # monorepo-tags: false
