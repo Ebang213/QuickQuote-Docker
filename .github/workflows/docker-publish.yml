@@ -28,7 +28,7 @@ jobs:
       - name: Read version from package.json
         id: ver
         shell: bash
-        working-directory: QuickQuote
+        
         run: |
           echo "version=$(node -p "require('./package.json').version")" >> "$GITHUB_OUTPUT"
 
@@ -44,8 +44,8 @@ jobs:
       - name: Build & push
         uses: docker/build-push-action@v5
         with:
-          context: ./QuickQuote
-          file: ./QuickQuote/Dockerfile
+          context: .
+          file: ./Dockerfile
           push: true
           platforms: linux/amd64,linux/arm64
           tags: ${{ steps.meta.outputs.tags }}
