@@ -26,7 +26,16 @@ jobs:
         run: npm ci
       - name: Build
         run: npm run build
+      # Configure Pages. If a PAT secret PAGES_TOKEN is provided,
+      # auto-enable Pages for the repo; otherwise just configure.
+      - name: Configure Pages (enable if needed)
+        if: ${{ secrets.PAGES_TOKEN != '' }}
+        uses: actions/configure-pages@v5
+        with:
+          enablement: true
+          token: ${{ secrets.PAGES_TOKEN }}
       - name: Configure Pages
+        if: ${{ secrets.PAGES_TOKEN == '' }}
         uses: actions/configure-pages@v5
       - name: Upload artifact
         uses: actions/upload-pages-artifact@v3
