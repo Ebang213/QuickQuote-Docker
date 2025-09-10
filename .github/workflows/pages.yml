@@ -17,6 +17,8 @@ concurrency:
 jobs:
   build:
     runs-on: ubuntu-latest
+    env:
+      PAGES_TOKEN: ${{ secrets.PAGES_TOKEN }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -29,13 +31,13 @@ jobs:
       # Configure Pages. If a PAT secret PAGES_TOKEN is provided,
       # auto-enable Pages for the repo; otherwise just configure.
       - name: Configure Pages (enable if needed)
-        if: ${{ secrets.PAGES_TOKEN != '' }}
+        if: ${{ env.PAGES_TOKEN != '' }}
         uses: actions/configure-pages@v5
         with:
           enablement: true
-          token: ${{ secrets.PAGES_TOKEN }}
+          token: ${{ env.PAGES_TOKEN }}
       - name: Configure Pages
-        if: ${{ secrets.PAGES_TOKEN == '' }}
+        if: ${{ env.PAGES_TOKEN == '' }}
         uses: actions/configure-pages@v5
       - name: Upload artifact
         uses: actions/upload-pages-artifact@v3
