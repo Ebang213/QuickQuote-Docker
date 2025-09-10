@@ -1,7 +1,8 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import rates from './lib/rates.json';
-import { useEstimate, useClampedNumber, usePdfExporter } from './lib/hooks.js';
+import { useEstimate, useClampedNumber, usePdfExporter, usePreferredCurrency, useCurrencyFormatter } from './lib/hooks.js';
 import OptionButtons from './lib/OptionButtons.jsx';
+import BreakdownChart from './BreakdownChart.jsx';
 
 const PROJECTS = Object.keys(rates.projects);
 const QUALITIES = Object.keys(rates.qualityMultipliers);
@@ -19,50 +20,60 @@ export default function QuickQuoteEstimator() {
   const [projectType, setProjectType] = useState(DEFAULT_PROJECT);
   const [quality, setQuality] = useState(DEFAULT_QUALITY);
   const [location, setLocation] = useState(DEFAULT_LOCATION);
-  const { value: sqft, onChange: handleSqftChange } = useClampedNumber(100, { min: 1, max: 100000 });
-  const { labor, material, total, currency, error: err, fmt } = useEstimate(Number(sqft), projectType, quality, location);
+  const [unit, setUnit] = useState('sqft'); // 'sqft' | 'sqm'
+  const [includeOverhead, setIncludeOverhead] = useState(false);
+  const preferredCurrency = usePreferredCurrency();
+  const [currencyMode, setCurrencyMode] = useState('Auto'); // 'Auto' or explicit code
+  const [history, setHistory] = useState([]);
+
+  const { value: sizeInput, onChange: handleSqftChange } = useClampedNumber(100, { min: 1, max: 100000 });
+  const sqftForCalc = useMemo(() => unit === 'sqm' ? Number(sizeInput) * 10.7639 : Number(sizeInput), [unit, sizeInput]);
+  const currencyOverride = currencyMode === 'Auto' ? undefined : currencyMode;
+  const { labor, material, total, currency, error: err } = useEstimate(Number(sqftForCalc), projectType, quality, location, currencyOverride);
+  const fmt = useCurrencyFormatter(currency);
 
   // Simple confidence band based on chosen quality
   const uncertaintyPct = quality === 'Low' ? 0.2 : quality === 'High' ? 0.1 : 0.15;
   const round2 = (n) => Math.round((n + Number.EPSILON) * 100) / 100;
   const rangeLow = round2(total * (1 - uncertaintyPct));
   const rangeHigh = round2(total * (1 + uncertaintyPct));
+  const overhead = includeOverhead ? round2(total * 0.1) : 0;
 
-  const exportPdf = usePdfExporter({ role, projectType, quality, location, sqft, labor, material, total, currency, fmt, rangeLow, rangeHigh });
-
-  function legacyExportPdf() {
-    const doc = new jsPDF();
-    const line = (y, text, bold=false) => {
-      if (bold) doc.setFont(undefined, 'bold');
-      doc.text(text, 14, y);
-      if (bold) doc.setFont(undefined, 'normal');
-    };
-
-    const y0 = 16;
-    line(y0, 'QuickQuote Estimate', true);
-    line(y0 + 8, `Role: ${role}`);
-    line(y0 + 16, `Project: ${projectType}`);
-    line(y0 + 24, `Quality: ${quality}`);
-    line(y0 + 32, `Location: ${location} (${currency})`);
-    line(y0 + 40, `Room Size: ${sqft} sq ft`);
-    line(y0 + 56, 'Breakdown', true);
-
-    const y1 = y0 + 64;
-    line(y1,   `Labor:    ${fmt.format(labor)}`);
-    line(y1+8, `Material: ${fmt.format(material)}`);
-    line(y1+16,`Total:    ${fmt.format(total)}`, true);
-
-    const p = rates.projects[projectType];
-    if (p) {
-      line(y1 + 32, 'Rates used:', true);
-      line(y1 + 40, `Labor per sq ft: ${p.laborPerSqFt}`);
-      line(y1 + 48, `Material per sq ft: ${p.materialPerSqFt}`);
-    }
-
-    doc.save('QuickQuote_Estimate.pdf');
-  }
+  const exportPdf = usePdfExporter({ role, projectType, quality, location, sqft: Number(sizeInput), unit, labor, material, total, currency, fmt, rangeLow, rangeHigh, overhead });
 
   useEffect(() => { /* reserved for side-effects/analytics later */ }, [labor, material, total]);
+
+  // Load quote history once
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem('qq_history_v1');
+      if (raw) setHistory(JSON.parse(raw));
+    } catch {}
+  }, []);
+
+  const persistHistory = (items) => {
+    setHistory(items);
+    try { localStorage.setItem('qq_history_v1', JSON.stringify(items)); } catch {}
+  };
+
+  const saveQuote = () => {
+    if (err) return;
+    const entry = {
+      ts: Date.now(), role, projectType, quality, location,
+      unit, size: Number(sizeInput), labor, material, total, currency
+    };
+    const next = [entry, ...history].slice(0, 5);
+    persistHistory(next);
+  };
+
+  const loadQuote = (q) => {
+    setRole(q.role);
+    setProjectType(q.projectType);
+    setQuality(q.quality);
+    setLocation(q.location);
+    setUnit(q.unit || 'sqft');
+    handleSqftChange(q.size);
+  };
 
   return (
     <div className="max-w-4xl mx-auto px-6 py-8">
@@ -94,16 +105,23 @@ export default function QuickQuoteEstimator() {
             </label>
 
             <label className="flex flex-col gap-1">
-              <span className="text-sm font-medium">Room Size (sq ft)</span>
+              <span className="text-sm font-medium">Room Size ({unit === 'sqm' ? 'sq m' : 'sq ft'})</span>
               <input
                 type="number"
                 min={1}
                 max={100000}
                 step="1"
                 className="rounded border p-2"
-                value={sqft}
+                value={sizeInput}
                 onChange={handleSqftChange}
               />
+              <div className="flex items-center justify-between mt-1 text-xs text-slate-500">
+                <span>Units:</span>
+                <OptionButtons options={['sqft','sqm']} value={unit} onChange={setUnit} keyboard={false} />
+              </div>
+              {unit === 'sqm' && (
+                <div className="text-xs text-slate-500">{sizeInput} sq m = {round2(Number(sizeInput) * 10.7639)} sq ft</div>
+              )}
             </label>
 
             <label className="flex flex-col gap-1">
@@ -114,6 +132,24 @@ export default function QuickQuoteEstimator() {
             <label className="flex flex-col gap-1">
               <span className="text-sm font-medium">Location</span>
               <OptionButtons options={LOCATIONS} value={location} onChange={setLocation} />
+            </label>
+
+            <label className="flex flex-col gap-1 sm:col-span-2">
+              <span className="text-sm font-medium">Currency Format</span>
+              <div className="flex items-center gap-2">
+                <select className="rounded border p-2" value={currencyMode} onChange={e => setCurrencyMode(e.target.value)}>
+                  <option value="Auto">Auto ({preferredCurrency})</option>
+                  <option value="USD">USD</option>
+                  <option value="EUR">EUR</option>
+                  <option value="GBP">GBP</option>
+                  <option value="CAD">CAD</option>
+                  <option value="GHS">GHS</option>
+                </select>
+                <label className="ml-auto inline-flex items-center gap-2 text-sm">
+                  <input type="checkbox" className="rounded" checked={includeOverhead} onChange={e => setIncludeOverhead(e.target.checked)} />
+                  Include overhead (10%)
+                </label>
+              </div>
             </label>
           </div>
 
@@ -126,11 +162,12 @@ export default function QuickQuoteEstimator() {
               <dl className="grid grid-cols-2 sm:grid-cols-3 gap-3">
                 <div><dt className="text-xs text-slate-500">Labor</dt><dd className="font-medium">{fmt.format(labor)}</dd></div>
                 <div><dt className="text-xs text-slate-500">Material</dt><dd className="font-medium">{fmt.format(material)}</dd></div>
-                <div><dt className="text-xs text-slate-500">Total</dt><dd className="font-semibold">{fmt.format(total)}</dd></div>
+                <div><dt className="text-xs text-slate-500">Total{includeOverhead ? ' (incl. overhead)' : ''}</dt><dd className="font-semibold">{fmt.format(total + overhead)}</dd></div>
               </dl>
               <div className="text-xs text-slate-600">
                 Confidence range (±{Math.round(uncertaintyPct * 100)}%): {fmt.format(rangeLow)} – {fmt.format(rangeHigh)}
               </div>
+              <BreakdownChart labor={labor} material={material} overhead={overhead} />
             </div>
           )}
 
@@ -138,6 +175,9 @@ export default function QuickQuoteEstimator() {
           <div className="flex flex-wrap items-center gap-3">
             <button className="px-4 py-2 rounded border bg-sky-600 text-white hover:bg-sky-700" onClick={exportPdf}>
               Download PDF
+            </button>
+            <button className="px-4 py-2 rounded border hover:bg-slate-50" onClick={saveQuote}>
+              Save Quote
             </button>
             <a
               className="px-4 py-2 rounded border hover:bg-slate-50"
@@ -148,12 +188,31 @@ export default function QuickQuoteEstimator() {
               Coming soon: AR room size via phone camera
             </a>
           </div>
+
+          {/* Quote History */}
+          {history.length > 0 && (
+            <div className="rounded-xl border bg-white p-4 space-y-3">
+              <div className="font-medium">Recent Quotes</div>
+              <ul className="space-y-2">
+                {history.map((q, i) => (
+                  <li key={q.ts + ':' + i} className="flex items-center gap-3 text-sm">
+                    <div className="flex-1 text-slate-700 truncate">
+                      {new Date(q.ts).toLocaleString()} · {q.projectType} · {q.size} {q.unit === 'sqm' ? 'sq m' : 'sq ft'} · {q.quality} · {q.location}
+                      <span className="ml-2 text-slate-500">{fmt.format(q.total)}</span>
+                    </div>
+                    <button className="px-3 py-1 rounded border hover:bg-slate-50" onClick={() => loadQuote(q)}>Load</button>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
         </div>
 
         <footer className="max-w-4xl mx-auto px-6 py-8 text-xs text-slate-400">
-          © {new Date().getFullYear()} QuickQuote — Estimates are for guidance only.
+          © {new Date().getFullYear()} QuickQuote – Estimates are for guidance only.
         </footer>
       </main>
     </div>
   );
 }
+
