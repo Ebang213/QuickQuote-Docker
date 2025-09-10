@@ -50,16 +50,13 @@ jobs:
           script: |
             const { owner, repo } = context.repo;
             try {
-              await github.rest.pages.get({ owner, repo });
+              // Check if Pages site exists
+              await github.rest.repos.getPages({ owner, repo });
               core.info('Pages site already exists.');
             } catch (e) {
               if (e.status === 404) {
                 core.info('Pages site not found; creating with build_type=workflow...');
-                await github.request('POST /repos/{owner}/{repo}/pages', {
-                  owner,
-                  repo,
-                  build_type: 'workflow',
-                });
+                await github.rest.repos.createPagesSite({ owner, repo, build_type: 'workflow' });
                 core.info('Pages site created.');
               } else {
                 throw e;
