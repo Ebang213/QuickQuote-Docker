@@ -21,7 +21,9 @@ export default function QuickQuoteEstimator() {
   const [quality, setQuality] = useState(DEFAULT_QUALITY);
   const [location, setLocation] = useState(DEFAULT_LOCATION);
   const [unit, setUnit] = useState('sqft'); // 'sqft' | 'sqm'
-  const [includeOverhead, setIncludeOverhead] = useState(false);
+  const [overheadPct, setOverheadPct] = useState(10);
+  const [taxPct, setTaxPct] = useState(0);
+  const [discountPct, setDiscountPct] = useState(0);
   const preferredCurrency = usePreferredCurrency();
   const [currencyMode, setCurrencyMode] = useState('Auto'); // 'Auto' or explicit code
   const [history, setHistory] = useState([]);
@@ -37,9 +39,14 @@ export default function QuickQuoteEstimator() {
   const round2 = (n) => Math.round((n + Number.EPSILON) * 100) / 100;
   const rangeLow = round2(total * (1 - uncertaintyPct));
   const rangeHigh = round2(total * (1 + uncertaintyPct));
-  const overhead = includeOverhead ? round2(total * 0.1) : 0;
+  const overhead = round2(total * (overheadPct / 100));
+  const subWithOverhead = round2(total + overhead);
+  const discountAmt = round2(subWithOverhead * (discountPct / 100));
+  const taxBase = round2(subWithOverhead - discountAmt);
+  const taxAmt = round2(taxBase * (taxPct / 100));
+  const grandTotal = round2(taxBase + taxAmt);
 
-  const exportPdf = usePdfExporter({ role, projectType, quality, location, sqft: Number(sizeInput), unit, labor, material, total, currency, fmt, rangeLow, rangeHigh, overhead });
+  const exportPdf = usePdfExporter({ role, projectType, quality, location, sqft: Number(sizeInput), unit, labor, material, total, currency, fmt, rangeLow, rangeHigh, overheadPct, taxPct, discountPct });
 
   useEffect(() => { /* reserved for side-effects/analytics later */ }, [labor, material, total]);
 
@@ -50,6 +57,54 @@ export default function QuickQuoteEstimator() {
       if (raw) setHistory(JSON.parse(raw));
     } catch {}
   }, []);
+
+  // Load from URL params (shareable links)
+  useEffect(() => {
+    try {
+      const sp = new URLSearchParams(window.location.search);
+      const r = sp.get('r');
+      const p = sp.get('p');
+      const q = sp.get('q');
+      const l = sp.get('l');
+      const u = sp.get('u');
+      const s = sp.get('s');
+      const c = sp.get('c');
+      const oh = sp.get('oh');
+      const tax = sp.get('tax');
+      const disc = sp.get('disc');
+
+      if (r && ['Homeowner','Contractor'].includes(r)) setRole(r);
+      if (p && PROJECTS.includes(p)) setProjectType(p);
+      if (q && QUALITIES.includes(q)) setQuality(q);
+      if (l && LOCATIONS.includes(l)) setLocation(l);
+      if (u && (u === 'sqft' || u === 'sqm')) setUnit(u);
+      if (s && !isNaN(parseFloat(s))) handleSqftChange(parseFloat(s));
+      if (c && (c === 'Auto' || c.length === 3)) setCurrencyMode(c);
+      if (oh && !isNaN(parseFloat(oh))) setOverheadPct(Math.max(0, Math.min(30, parseFloat(oh))));
+      if (tax && !isNaN(parseFloat(tax))) setTaxPct(Math.max(0, Math.min(50, parseFloat(tax))));
+      if (disc && !isNaN(parseFloat(disc))) setDiscountPct(Math.max(0, Math.min(50, parseFloat(disc))));
+    } catch {}
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Keep URL in sync (without pushing history)
+  useEffect(() => {
+    try {
+      const sp = new URLSearchParams();
+      sp.set('r', role);
+      sp.set('p', projectType);
+      sp.set('q', quality);
+      sp.set('l', location);
+      sp.set('u', unit);
+      sp.set('s', String(sizeInput));
+      sp.set('c', currencyMode);
+      sp.set('oh', String(overheadPct));
+      sp.set('tax', String(taxPct));
+      sp.set('disc', String(discountPct));
+      const url = `${window.location.pathname}?${sp.toString()}`;
+      window.history.replaceState(null, '', url);
+    } catch {}
+  }, [role, projectType, quality, location, unit, sizeInput, currencyMode, overheadPct, taxPct, discountPct]);
 
   const persistHistory = (items) => {
     setHistory(items);
@@ -135,8 +190,8 @@ export default function QuickQuoteEstimator() {
             </label>
 
             <label className="flex flex-col gap-1 sm:col-span-2">
-              <span className="text-sm font-medium">Currency Format</span>
-              <div className="flex items-center gap-2">
+              <span className="text-sm font-medium">Currency & Adjustments</span>
+              <div className="flex items-center gap-2 flex-wrap">
                 <select className="rounded border p-2" value={currencyMode} onChange={e => setCurrencyMode(e.target.value)}>
                   <option value="Auto">Auto ({preferredCurrency})</option>
                   <option value="USD">USD</option>
@@ -145,10 +200,25 @@ export default function QuickQuoteEstimator() {
                   <option value="CAD">CAD</option>
                   <option value="GHS">GHS</option>
                 </select>
-                <label className="ml-auto inline-flex items-center gap-2 text-sm">
-                  <input type="checkbox" className="rounded" checked={includeOverhead} onChange={e => setIncludeOverhead(e.target.checked)} />
-                  Include overhead (10%)
-                </label>
+                <div className="flex items-center gap-2 text-sm">
+                  <label className="flex items-center gap-1">
+                    Overhead
+                    <input type="range" min={0} max={30} step={1} value={overheadPct} onChange={e => setOverheadPct(Number(e.target.value))} />
+                    <span className="w-8 text-right">{overheadPct}%</span>
+                  </label>
+                </div>
+                <div className="flex items-center gap-2 text-sm">
+                  <label className="flex items-center gap-1">
+                    Tax%
+                    <input type="number" min={0} max={50} step={0.5} className="w-16 rounded border p-1" value={taxPct} onChange={e => setTaxPct(Number(e.target.value))} />
+                  </label>
+                </div>
+                <div className="flex items-center gap-2 text-sm">
+                  <label className="flex items-center gap-1">
+                    Discount%
+                    <input type="number" min={0} max={50} step={0.5} className="w-16 rounded border p-1" value={discountPct} onChange={e => setDiscountPct(Number(e.target.value))} />
+                  </label>
+                </div>
               </div>
             </label>
           </div>
@@ -162,7 +232,11 @@ export default function QuickQuoteEstimator() {
               <dl className="grid grid-cols-2 sm:grid-cols-3 gap-3">
                 <div><dt className="text-xs text-slate-500">Labor</dt><dd className="font-medium">{fmt.format(labor)}</dd></div>
                 <div><dt className="text-xs text-slate-500">Material</dt><dd className="font-medium">{fmt.format(material)}</dd></div>
-                <div><dt className="text-xs text-slate-500">Total{includeOverhead ? ' (incl. overhead)' : ''}</dt><dd className="font-semibold">{fmt.format(total + overhead)}</dd></div>
+                <div><dt className="text-xs text-slate-500">Subtotal</dt><dd className="font-semibold">{fmt.format(total)}</dd></div>
+                <div><dt className="text-xs text-slate-500">Overhead ({overheadPct}%)</dt><dd className="font-medium">{fmt.format(overhead)}</dd></div>
+                <div><dt className="text-xs text-slate-500">Tax ({taxPct}%)</dt><dd className="font-medium">{fmt.format(taxAmt)}</dd></div>
+                <div><dt className="text-xs text-slate-500">Discount ({discountPct}%)</dt><dd className="font-medium">-{fmt.format(discountAmt)}</dd></div>
+                <div className="col-span-2 sm:col-span-3"><dt className="text-xs text-slate-500">Grand Total</dt><dd className="font-semibold">{fmt.format(grandTotal)}</dd></div>
               </dl>
               <div className="text-xs text-slate-600">
                 Confidence range (±{Math.round(uncertaintyPct * 100)}%): {fmt.format(rangeLow)} – {fmt.format(rangeHigh)}
@@ -215,4 +289,3 @@ export default function QuickQuoteEstimator() {
     </div>
   );
 }
-

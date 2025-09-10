@@ -8,5 +8,6 @@ test('changing sqft updates the total', () => {
   const input = screen.getByLabelText(/Room Size/i);
   fireEvent.change(input, { target: { value: '120' } });
   // Should show a total somewhere (not asserting exact value to avoid coupling)
-  expect(screen.getByText(/Total/i)).toBeInTheDocument();
+  const totals = screen.getAllByText(/Total/i);
+  expect(totals.length).toBeGreaterThan(0);
 });

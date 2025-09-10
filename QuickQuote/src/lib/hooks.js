@@ -63,7 +63,7 @@ export function useClampedNumber(initial = 0, { min = -Infinity, max = Infinity 
 }
 
 // Build a memoized PDF export function based on current inputs
-export function usePdfExporter({ role, projectType, quality, location, sqft, unit = 'sqft', labor, material, total, currency, fmt, rangeLow, rangeHigh, overhead = 0 }) {
+export function usePdfExporter({ role, projectType, quality, location, sqft, unit = 'sqft', labor, material, total, currency, fmt, rangeLow, rangeHigh, overheadPct = 0, taxPct = 0, discountPct = 0 }) {
   return useCallback(() => {
     const doc = new jsPDF();
     const line = (y, text, bold = false) => {
@@ -89,23 +89,34 @@ export function usePdfExporter({ role, projectType, quality, location, sqft, uni
     const y1 = y0 + 64;
     line(y1, `Labor:    ${fmt.format(labor)}`);
     line(y1 + 8, `Material: ${fmt.format(material)}`);
-    if (overhead > 0) line(y1 + 16, `Overhead: ${fmt.format(overhead)}`);
-    line(y1 + 24, `Total:    ${fmt.format(total + overhead)}`, true);
+
+    const round2 = (n) => Math.round((n + Number.EPSILON) * 100) / 100;
+    const overheadAmt = round2(total * (overheadPct / 100));
+    const subWithOverhead = round2(total + overheadAmt);
+    const discountAmt = round2(subWithOverhead * (discountPct / 100));
+    const taxBase = round2(subWithOverhead - discountAmt);
+    const taxAmt = round2(taxBase * (taxPct / 100));
+    const grandTotal = round2(taxBase + taxAmt);
+
+    if (overheadAmt > 0) line(y1 + 16, `Overhead (${overheadPct}%): ${fmt.format(overheadAmt)}`);
+    if (discountAmt > 0) line(y1 + 24, `Discount (${discountPct}%): -${fmt.format(discountAmt)}`);
+    if (taxAmt > 0) line(y1 + 32, `Tax (${taxPct}%): ${fmt.format(taxAmt)}`);
+    line(y1 + 40, `Total:    ${fmt.format(grandTotal)}`, true);
 
     // Optional confidence range if provided
     if (typeof rangeLow === 'number' && typeof rangeHigh === 'number') {
-      line(y1 + 40, `Range:    ${fmt.format(rangeLow)} - ${fmt.format(rangeHigh)}`);
+      line(y1 + 48, `Range:    ${fmt.format(rangeLow)} - ${fmt.format(rangeHigh)}`);
     }
 
     const p = rates.projects[projectType];
     if (p) {
-      line(y1 + 56, 'Rates used:', true);
-      line(y1 + 64, `Labor per sq ft: ${p.laborPerSqFt}`);
-      line(y1 + 72, `Material per sq ft: ${p.materialPerSqFt}`);
+      line(y1 + 64, 'Rates used:', true);
+      line(y1 + 72, `Labor per sq ft: ${p.laborPerSqFt}`);
+      line(y1 + 80, `Material per sq ft: ${p.materialPerSqFt}`);
     }
 
     doc.save('QuickQuote_Estimate.pdf');
-  }, [role, projectType, quality, location, sqft, unit, labor, material, total, currency, fmt, rangeLow, rangeHigh, overhead]);
+  }, [role, projectType, quality, location, sqft, unit, labor, material, total, currency, fmt, rangeLow, rangeHigh, overheadPct, taxPct, discountPct]);
 }
 
 // Manage roving focus + keyboard selection for option groups
@@ -158,4 +169,3 @@ export function useSelectableOptions(options, value, onChange) {
 
   return { getButtonProps };
 }
-
