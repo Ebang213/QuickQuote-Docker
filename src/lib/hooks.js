@@ -1,17 +1,12 @@
 import { useMemo, useState, useCallback, useRef } from 'react';
 import { computeEstimate } from './calc.js';
+import { makeCurrencyFormatter } from './format';
 import jsPDF from 'jspdf';
 import rates from './rates.json';
 
 // Format numbers in a given currency once and memoize the formatter
 export function useCurrencyFormatter(currency = 'USD') {
-  return useMemo(() => {
-    try {
-      return new Intl.NumberFormat(undefined, { style: 'currency', currency });
-    } catch {
-      return new Intl.NumberFormat(undefined, { style: 'currency', currency: 'USD' });
-    }
-  }, [currency]);
+  return useMemo(() => makeCurrencyFormatter(currency), [currency]);
 }
 
 // Core estimation hook that centralizes compute + currency + formatting
