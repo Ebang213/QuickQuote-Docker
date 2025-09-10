@@ -1,0 +1,22 @@
+{
+  "__comment_quality": "Multipliers for quality levels",
+  "qualityMultipliers": {
+    "Low": 0.85,
+    "Medium": 1,
+    "High": 1.25
+  },
+
+  "__comment_location": "Multipliers & currency per location",
+  "locationMultipliers": {
+    "US":    { "multiplier": 1,   "currency": "USD" },
+    "Ghana": { "multiplier": 0.8, "currency": "GHS" }
+  },
+
+  "__comment_projects": "Labor & material costs per square foot",
+  "projects": {
+    "Bathroom Remodel": { "laborPerSqFt": 25, "materialPerSqFt": 40 },
+    "Kitchen Remodel":  { "laborPerSqFt": 30, "materialPerSqFt": 55 },
+    "Flooring":         { "laborPerSqFt": 22, "materialPerSqFt": 35 },
+    "Painting":         { "laborPerSqFt": 15, "materialPerSqFt": 10 }
+  }
+}

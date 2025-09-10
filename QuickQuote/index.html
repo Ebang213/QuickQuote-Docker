@@ -1,0 +1,24 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <link rel="manifest" href="/manifest.webmanifest" />
+    <meta name="theme-color" content="#0ea5e9" />
+    <title>QuickQuote</title>
+  </head>
+  <body class="bg-slate-50">
+    <div id="root"></div>
+    <!-- Vite injects the script when running dev; no manual script tag needed -->
+    <script type="module" src="/src/main.jsx"></script>
+    <script>
+      // Lightweight SW registration for PWA/offline capability
+      if ('serviceWorker' in navigator) {
+        window.addEventListener('load', () => {
+          navigator.serviceWorker.register('/sw.js').catch(() => {/* ignore */});
+        });
+      }
+    </script>
+  </body>
+</html>
