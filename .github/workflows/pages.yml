@@ -36,9 +36,11 @@ jobs:
         with:
           enablement: true
           token: ${{ env.PAGES_TOKEN }}
+        continue-on-error: true
       - name: Configure Pages
         if: ${{ env.PAGES_TOKEN == '' }}
         uses: actions/configure-pages@v5
+        continue-on-error: true
       - name: Upload artifact
         uses: actions/upload-pages-artifact@v3
         with:
