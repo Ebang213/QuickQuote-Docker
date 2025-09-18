@@ -62,63 +62,131 @@ export function useClampedNumber(initial = 0, { min = -Infinity, max = Infinity 
   return { value, setValue, onChange };
 }
 
-// Build a memoized PDF export function based on current inputs
-export function usePdfExporter({ role, projectType, quality, location, sqft, unit = 'sqft', labor, material, total, currency, fmt, rangeLow, rangeHigh, overheadPct = 0, taxPct = 0, discountPct = 0 }) {
+export function usePdfExporter({
+  role,
+  projectType,
+  quality,
+  location,
+  sqft,
+  unit = 'sqft',
+  currency,
+  fmt,
+  rangeLow,
+  rangeHigh,
+  materialAdditions = [],
+  clientSnapshot = {},
+  totals = {},
+}) {
   return useCallback(() => {
+    const currencyFormatter =
+      fmt && typeof fmt.format === 'function'
+        ? fmt
+        : makeCurrencyFormatter(currency || 'USD');
+    const formatAmount = (value) => currencyFormatter.format(Number(value) || 0);
+
     const doc = new jsPDF();
-    const line = (y, text, bold = false) => {
+    let yPos = 16;
+    const addLine = (text, bold = false, spacing = 6) => {
       if (bold) doc.setFont(undefined, 'bold');
-      doc.text(String(text), 14, y);
+      doc.text(String(text), 14, yPos);
       if (bold) doc.setFont(undefined, 'normal');
+      yPos += spacing;
     };
 
-    const y0 = 16;
-    line(y0, 'QuickQuote Estimate', true);
-    const ts = new Date();
-    const fmt2 = (n) => String(n).padStart(2, '0');
-    const stamp = `${ts.getFullYear()}-${fmt2(ts.getMonth() + 1)}-${fmt2(ts.getDate())} ${fmt2(ts.getHours())}:${fmt2(ts.getMinutes())}`;
-    line(y0 + 6, `Generated: ${stamp}`);
-    line(y0 + 8, `Role: ${role}`);
-    line(y0 + 16, `Project: ${projectType}`);
-    line(y0 + 24, `Quality: ${quality}`);
-    line(y0 + 32, `Location: ${location} (${currency})`);
+    const now = new Date();
+    const pad = (n) => String(n).padStart(2, '0');
+    const stamp = `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())} ${pad(now.getHours())}:${pad(now.getMinutes())}`;
+    const {
+      laborBase = 0,
+      laborFinal = 0,
+      laborMarkupPct = 0,
+      materialBase = 0,
+      materialExtrasTotal = 0,
+      materialFinal = 0,
+      materialMarkupPct = 0,
+      subtotal = 0,
+      overheadPct = 0,
+      overheadAmt = 0,
+      discountPct = 0,
+      discountAmt = 0,
+      taxPct = 0,
+      taxAmt = 0,
+      grandTotal = 0,
+    } = totals || {};
+
+    const quickMaterials = Array.isArray(materialAdditions) ? materialAdditions : [];
+    const client = clientSnapshot && typeof clientSnapshot === 'object' ? clientSnapshot : {};
+
+    addLine('QuickQuote Summary', true);
+    addLine(`Generated: ${stamp}`);
+    addLine(`Role: ${role}`);
+    addLine(`Project: ${projectType}`);
+    addLine(`Quality: ${quality}`);
+    addLine(`Location: ${location} (${currency})`);
     const unitLabel = unit === 'sqm' ? 'sq m' : 'sq ft';
-    line(y0 + 40, `Room Size: ${sqft} ${unitLabel}`);
-    line(y0 + 56, 'Breakdown', true);
+    addLine(`Room Size: ${sqft} ${unitLabel}`);
 
-    const y1 = y0 + 64;
-    line(y1, `Labor:    ${fmt.format(labor)}`);
-    line(y1 + 8, `Material: ${fmt.format(material)}`);
+    const { name = '', company = '', email = '', phone = '', notes = '' } = client;
+    if (name || company || email || phone || notes) {
+      yPos += 4;
+      addLine('Client Snapshot', true);
+      if (name) addLine(`Name: ${name}`);
+      if (company) addLine(`Company: ${company}`);
+      if (email) addLine(`Email: ${email}`);
+      if (phone) addLine(`Phone: ${phone}`);
+      if (notes) {
+        doc.splitTextToSize(`Notes: ${notes}`, 180).forEach((line) => addLine(line));
+      }
+    }
 
-    const round2 = (n) => Math.round((n + Number.EPSILON) * 100) / 100;
-    const overheadAmt = round2(total * (overheadPct / 100));
-    const subWithOverhead = round2(total + overheadAmt);
-    const discountAmt = round2(subWithOverhead * (discountPct / 100));
-    const taxBase = round2(subWithOverhead - discountAmt);
-    const taxAmt = round2(taxBase * (taxPct / 100));
-    const grandTotal = round2(taxBase + taxAmt);
+    yPos += 4;
+    addLine('Financial Breakdown', true);
+    addLine(`Labor (${laborMarkupPct}% markup): ${formatAmount(laborFinal)} (base ${formatAmount(laborBase)})`);
+    addLine(`Materials (${materialMarkupPct}% markup): ${formatAmount(materialFinal)} (base ${formatAmount(materialBase)} + quick adds ${formatAmount(materialExtrasTotal)})`);
+    addLine(`Subtotal before overhead: ${formatAmount(subtotal)}`);
+    if (overheadPct || overheadAmt) addLine(`Overhead (${overheadPct}%): ${formatAmount(overheadAmt)}`);
+    if (discountPct || discountAmt) addLine(`Discount (${discountPct}%): -${formatAmount(discountAmt)}`);
+    if (taxPct || taxAmt) addLine(`Tax (${taxPct}%): ${formatAmount(taxAmt)}`);
+    addLine(`Grand Total: ${formatAmount(grandTotal)}`, true);
 
-    if (overheadAmt > 0) line(y1 + 16, `Overhead (${overheadPct}%): ${fmt.format(overheadAmt)}`);
-    if (discountAmt > 0) line(y1 + 24, `Discount (${discountPct}%): -${fmt.format(discountAmt)}`);
-    if (taxAmt > 0) line(y1 + 32, `Tax (${taxPct}%): ${fmt.format(taxAmt)}`);
-    line(y1 + 40, `Total:    ${fmt.format(grandTotal)}`, true);
+    if (quickMaterials.length > 0) {
+      yPos += 4;
+      addLine('Quick Materials', true);
+      quickMaterials.forEach((item) => {
+        addLine(`${item.name}: ${formatAmount(item.cost)}`);
+      });
+    }
 
-    // Optional confidence range if provided
     if (typeof rangeLow === 'number' && typeof rangeHigh === 'number') {
-      line(y1 + 48, `Range:    ${fmt.format(rangeLow)} - ${fmt.format(rangeHigh)}`);
+      yPos += 4;
+      addLine(`Confidence Range: ${formatAmount(rangeLow)} - ${formatAmount(rangeHigh)}`);
     }
 
-    const p = rates.projects[projectType];
-    if (p) {
-      line(y1 + 64, 'Rates used:', true);
-      line(y1 + 72, `Labor per sq ft: ${p.laborPerSqFt}`);
-      line(y1 + 80, `Material per sq ft: ${p.materialPerSqFt}`);
+    const project = rates.projects[projectType];
+    if (project) {
+      yPos += 4;
+      addLine('Reference Rates', true);
+      addLine(`Labor per sq ft: ${project.laborPerSqFt}`);
+      addLine(`Material per sq ft: ${project.materialPerSqFt}`);
     }
 
-    doc.save('QuickQuote_Estimate.pdf');
-  }, [role, projectType, quality, location, sqft, unit, labor, material, total, currency, fmt, rangeLow, rangeHigh, overheadPct, taxPct, discountPct]);
+    doc.save('QuickQuote_Summary.pdf');
+  }, [
+    role,
+    projectType,
+    quality,
+    location,
+    sqft,
+    unit,
+    currency,
+    fmt,
+    rangeLow,
+    rangeHigh,
+    materialAdditions,
+    clientSnapshot,
+    totals,
+  ]);
 }
-
 // Manage roving focus + keyboard selection for option groups
 export function useSelectableOptions(options, value, onChange) {
   const refs = useRef([]);
@@ -147,7 +215,7 @@ export function useSelectableOptions(options, value, onChange) {
         next = last;
         break;
       case 'Enter':
-      case ' ': // Space
+      case ' ':
         onChange(options[idx]);
         e.preventDefault();
         return;
@@ -169,3 +237,7 @@ export function useSelectableOptions(options, value, onChange) {
 
   return { getButtonProps };
 }
+
+
+
+
